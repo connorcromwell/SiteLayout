@@ -1,12 +1,10 @@
 import math
 import os
-from io import BytesIO
-
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
 from streamlit_drawable_canvas import st_canvas
+from io import BytesIO
 from streamlit_image_coordinates import streamlit_image_coordinates
-
 
 st.set_page_config(page_title="Site Layout Tool", layout="wide")
 
@@ -22,7 +20,6 @@ DOCK_WIDTH_IN = 37.72
 DOCK_HEIGHT_IN = 34.14
 DOCK_IMAGE_PATH = "dock.png"
 
-
 if "step" not in st.session_state:
     st.session_state.step = 0
 
@@ -34,12 +31,6 @@ if "site_image_bytes" not in st.session_state:
 
 if "docks" not in st.session_state:
     st.session_state.docks = []
-
-
-def get_site_image():
-    if st.session_state.site_image_bytes is None:
-        return None
-    return Image.open(BytesIO(st.session_state.site_image_bytes)).convert("RGB")
 
 
 def next_step():
@@ -56,11 +47,16 @@ def prev_step():
 def get_display_image(image, max_width=1200):
     original_width, original_height = image.size
 
-    display_width = min(original_width, max_width)
+    if original_width <= max_width:
+        display_width = original_width
+    else:
+        display_width = max_width
+
     scale = display_width / original_width
     display_height = int(original_height * scale)
 
     display_image = image.resize((display_width, display_height))
+
     return display_image, display_width, display_height, scale
 
 
@@ -97,28 +93,29 @@ def get_last_line_length_pixels(canvas_json, display_scale):
     if display_scale == 0:
         return None
 
-    return display_pixel_length / display_scale
+    original_pixel_length = display_pixel_length / display_scale
+    return original_pixel_length
 
 
 def get_pixels_per_inch():
     vertical_px = get_last_line_length_pixels(
-        st.session_state.get("vertical_scale_data"),
-        st.session_state.get("vertical_display_scale"),
+        st.session_state.vertical_scale_data,
+        st.session_state.vertical_display_scale,
     )
 
     horizontal_px = get_last_line_length_pixels(
-        st.session_state.get("horizontal_scale_data"),
-        st.session_state.get("horizontal_display_scale"),
+        st.session_state.horizontal_scale_data,
+        st.session_state.horizontal_display_scale,
     )
 
     vertical_inches = convert_to_inches(
-        st.session_state.get("vertical_scale_distance", 0),
-        st.session_state.get("vertical_scale_unit", "ft"),
+        st.session_state.vertical_scale_distance,
+        st.session_state.vertical_scale_unit,
     )
 
     horizontal_inches = convert_to_inches(
-        st.session_state.get("horizontal_scale_distance", 0),
-        st.session_state.get("horizontal_scale_unit", "ft"),
+        st.session_state.horizontal_scale_distance,
+        st.session_state.horizontal_scale_unit,
     )
 
     vertical_ppi = vertical_px / vertical_inches if vertical_px and vertical_inches else None
@@ -133,9 +130,20 @@ def get_pixels_per_inch():
 def render_docks_on_image(base_image):
     base = base_image.convert("RGBA").copy()
 
+    # Fade image toward white
     opacity = 0.65
-    white_layer = Image.new("RGBA", base.size, (255, 255, 255, 255))
-    output = Image.blend(white_layer, base, opacity)
+
+    white_layer = Image.new(
+        "RGBA",
+        base.size,
+        (255, 255, 255, 255),
+    )
+
+    output = Image.blend(
+        white_layer,
+        base,
+        opacity,
+    )
 
     if not os.path.exists(DOCK_IMAGE_PATH):
         return output
@@ -166,7 +174,6 @@ def render_docks_on_image(base_image):
 
     return output
 
-
 def render_dimensions_on_image(base_image):
     output = base_image.convert("RGBA").copy()
 
@@ -190,8 +197,11 @@ def render_dimensions_on_image(base_image):
     draw = ImageDraw.Draw(output)
 
     try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
-    except Exception:
+        font = ImageFont.truetype(
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            24,
+        )
+    except:
         font = ImageFont.load_default()
 
     for obj in objects:
@@ -208,7 +218,8 @@ def render_dimensions_on_image(base_image):
         distance_inches = math.sqrt(dx_inches ** 2 + dy_inches ** 2)
         distance_feet = distance_inches / 12
 
-        draw.line((x1, y1, x2, y2), fill=(0, 0, 0, 255), width=5)
+        # black line
+        draw.line((x1, y1, x2, y2), fill=(0, 0, 0, 0), width=5)
 
         mid_x = (x1 + x2) / 2
         mid_y = (y1 + y2) / 2
@@ -230,7 +241,11 @@ def render_dimensions_on_image(base_image):
             width=4,
         )
 
-        bbox = draw.textbbox((0, 0), label, font=font)
+        bbox = draw.textbbox(
+            (0, 0),
+            label,
+            font=font,
+        )
 
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
@@ -246,7 +261,6 @@ def render_dimensions_on_image(base_image):
         )
 
     return output
-
 
 st.title("Site Layout Tool")
 
@@ -270,14 +284,18 @@ if st.session_state.step == 0:
         type=["png", "jpg", "jpeg"],
     )
 
-    if uploaded_file is not None:
+    if uploaded_file:
         st.session_state.site_image_bytes = uploaded_file.getvalue()
 
     site_image = get_site_image()
 
-    if site_image is not None:
+    if site_image:
+    st.image(
+        site_image,
+
+    if st.session_state.site_image:
         st.image(
-            site_image,
+            st.session_state.site_image,
             caption="Imported Site Image",
             use_container_width=True,
         )
@@ -291,13 +309,14 @@ if st.session_state.step == 0:
 
 # Step 2: Draw Scale Lines
 elif st.session_state.step == 1:
-    st.header("Step 2: Draw Scale Lines")
 
     site_image = get_site_image()
 
     if site_image is None:
         st.error("No image found. Go back to Step 1 and upload the image again.")
         st.stop()
+        
+    st.header("Step 2: Draw Scale Lines")
 
     if "scale_substep" not in st.session_state:
         st.session_state.scale_substep = "vertical"
@@ -313,7 +332,7 @@ elif st.session_state.step == 1:
     )
 
     display_image, display_width, display_height, display_scale = get_display_image(
-        site_image,
+        st.session_state.site_image,
         max_width=display_width_setting,
     )
 
@@ -407,6 +426,21 @@ elif st.session_state.step == 1:
                 st.session_state.horizontal_scale_data = canvas_result.json_data
                 st.session_state.horizontal_display_scale = display_scale
 
+                st.session_state.scale_distance = {
+                    "vertical": st.session_state.vertical_scale_distance,
+                    "horizontal": horizontal_distance,
+                }
+
+                st.session_state.scale_unit = {
+                    "vertical": st.session_state.vertical_scale_unit,
+                    "horizontal": horizontal_unit,
+                }
+
+                st.session_state.scale_data = {
+                    "vertical": st.session_state.vertical_scale_data,
+                    "horizontal": canvas_result.json_data,
+                }
+
                 next_step()
                 st.rerun()
 
@@ -415,14 +449,10 @@ elif st.session_state.step == 1:
 elif st.session_state.step == 2:
     st.header("Step 3: Place Dock Image")
 
-    site_image = get_site_image()
-
-    if site_image is None:
-        st.error("No image found. Go back to Step 1 and upload the image again.")
-        st.stop()
-
     if not os.path.exists(DOCK_IMAGE_PATH):
-        st.error("dock.png was not found. Put dock.png in the same folder as layout-tool.py.")
+        st.error(
+            "dock.png was not found. Put dock.png in the same folder as layout-tool.py."
+        )
         st.stop()
 
     horizontal_ppi, vertical_ppi = get_pixels_per_inch()
@@ -431,7 +461,7 @@ elif st.session_state.step == 2:
         st.error("Scale data is missing. Go back to Step 2 and confirm both scale lines.")
         st.stop()
 
-    base_w, base_h = site_image.size
+    base_w, base_h = st.session_state.site_image.size
 
     dock_width_px = int(DOCK_WIDTH_IN * horizontal_ppi)
     dock_height_px = int(DOCK_HEIGHT_IN * vertical_ppi)
@@ -454,7 +484,7 @@ elif st.session_state.step == 2:
     if st.session_state.placing_dock:
         st.warning("Click on the image where you want to place the new dock.")
 
-    preview_image = render_docks_on_image(site_image).convert("RGB")
+    preview_image = render_docks_on_image(st.session_state.site_image).convert("RGB")
 
     display_image, display_width, display_height, display_scale = get_display_image(
         preview_image,
@@ -538,18 +568,27 @@ elif st.session_state.step == 2:
         )
 
         st.sidebar.markdown("#### Rotate Dock")
-        st.sidebar.write(f"Current Rotation: {int(selected_dock['rotation'])}°")
+
+        st.sidebar.write(
+            f"Current Rotation: {int(selected_dock['rotation'])}°"
+        )
 
         rot_left_col, rot_right_col = st.sidebar.columns(2)
 
         with rot_left_col:
             if st.button("↺ Left", key="dock_rotate_left"):
-                selected_dock["rotation"] = max(-180, selected_dock["rotation"] - 5)
+                selected_dock["rotation"] = max(
+                    -180,
+                    selected_dock["rotation"] - 5,
+                )
                 st.rerun()
 
         with rot_right_col:
             if st.button("↻ Right", key="dock_rotate_right"):
-                selected_dock["rotation"] = min(180, selected_dock["rotation"] + 5)
+                selected_dock["rotation"] = min(
+                    180,
+                    selected_dock["rotation"] + 5,
+                )
                 st.rerun()
 
         if st.sidebar.button("Delete Selected Dock"):
@@ -574,16 +613,9 @@ elif st.session_state.step == 2:
             next_step()
             st.rerun()
 
-
 # Step 4: Draw Dimension Lines
 elif st.session_state.step == 3:
     st.header("Step 4: Draw Dimension Lines")
-
-    site_image = get_site_image()
-
-    if site_image is None:
-        st.error("No image found. Go back to Step 1 and upload the image again.")
-        st.stop()
 
     st.sidebar.markdown("### Dimension Settings")
     dimension_label = st.sidebar.text_input("Dimension label", "Distance")
@@ -596,7 +628,7 @@ elif st.session_state.step == 3:
         step=100,
     )
 
-    image_with_docks = render_docks_on_image(site_image).convert("RGB")
+    image_with_docks = render_docks_on_image(st.session_state.site_image).convert("RGB")
 
     display_image, display_width, display_height, display_scale = get_display_image(
         image_with_docks,
@@ -618,12 +650,10 @@ elif st.session_state.step == 3:
     )
 
     col1, col2 = st.sidebar.columns(2)
-
     with col1:
         if st.button("Back"):
             prev_step()
             st.rerun()
-
     with col2:
         if st.button("Confirm Dimensions"):
             st.session_state.dimension_label = dimension_label
@@ -637,16 +667,10 @@ elif st.session_state.step == 3:
 elif st.session_state.step == 4:
     st.header("Step 5: Review and Export")
 
-    site_image = get_site_image()
-
-    if site_image is None:
-        st.error("No image found. Go back to Step 1 and upload the image again.")
-        st.stop()
-
     st.sidebar.markdown("### Export Settings")
     export_name = st.sidebar.text_input("Export filename", "site_layout.png")
 
-    image_with_docks = render_docks_on_image(site_image)
+    image_with_docks = render_docks_on_image(st.session_state.site_image)
     final_image = render_dimensions_on_image(image_with_docks).convert("RGB")
 
     st.image(
@@ -656,12 +680,10 @@ elif st.session_state.step == 4:
     )
 
     col1, col2 = st.sidebar.columns(2)
-
     with col1:
         if st.button("Back"):
             prev_step()
             st.rerun()
-
     with col2:
         if st.button("Export"):
             img_buffer = BytesIO()
