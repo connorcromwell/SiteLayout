@@ -1,0 +1,4 @@
+streamlit
+pillow
+streamlit-drawable-canvas
+streamlit-image-coordinates
